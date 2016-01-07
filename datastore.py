@@ -29,13 +29,14 @@ class MemTable(object):
 
     def __init__(self, data_store):
         self.data_store = data_store
+        self.primary_key_columns = self.data_store.primary_key_columns
         self.docs = {}
 
     def close(self):
         pass
 
     def add(self, doc):
-        key = tuple(doc[n] for n in self.data_store.primary_key_columns)
+        key = tuple([doc[n] for n in self.primary_key_columns])
         self.docs[key] = doc
 
     def get(self, key):
@@ -55,14 +56,16 @@ class SSTable(object):
 
 if __name__ == '__main__':
     ds = DataStore(os.path.join('tmp', 'store0'), ['id0', 'id1'], ['first_name', 'last_name'])
+    
     ds.add({'id0': 1, 'id1': 2, 'first_name': 'Marko', 'last_name': 'Tasic'})
     ds.add({'id0': 2, 'id1': 3, 'first_name': 'Milica', 'last_name': 'Tasic'})
     ds.add({'id0': 3, 'id1': 4, 'first_name': 'Milos', 'last_name': 'Milosevic'})
     ds.add({'id0': 4, 'id1': 5, 'first_name': 'Milan', 'last_name': 'Zdravkovic'})
-    # print(ds.memtable.docs)
+    
     print(ds.get(1, 2))
     print(ds.get(4, 5))
     print(ds.has(2, 3))
     ds.remove(2, 3)
     print(ds.has(2, 3))
+    
     ds.close()
