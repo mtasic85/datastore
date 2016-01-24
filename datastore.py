@@ -1,11 +1,31 @@
+__all__ = ['DataStore']
 import os
+import re
 
 class DataStore(object):
-    def __init__(self, dir_path, primary_key_columns, columns):
-        self.dir_path = dir_path
+    def __init__(self, path, name, primary_key_columns, columns):
+        self.path = path
+        self.name = name
         self.primary_key_columns = primary_key_columns
         self.columns = columns
         self.memtable = MemTable(self)
+
+        # create dir for datastore
+        self.dir_path = os.path.join(self.path, self.name)
+        os.makedirs(self.dir_path)
+        self.revisons = []
+
+        for entry in os.scandir(self.dir_path):
+            if not entry.is_file():
+                continue
+
+            if not entry.name.endswith('.sstable'):
+                continue
+
+            revison = re.findall(r'\b\d+\b', entry.name)[0]
+            self.revisons.append(revison)
+
+        self.revisons.sort()
 
     def close(self):
         self.memtable.close()
@@ -51,8 +71,28 @@ class MemTable(object):
         del self.docs[key]
 
 class SSTable(object):
-    def __init__(self, data_store):
+    def __init__(self, data_store, revision):
         self.data_store = data_store
+        self.revision = revision
+
+    @classmethod
+    def create_sstable(cls, data_store, revision):
+        pass
+
+class PrimaryKey(object):
+    def __init__(self, data_store, revision):
+        self.data_store = data_store
+        self.revision = revision
+
+class Index(object):
+    def __init__(self, data_store, revision):
+        self.data_store = data_store
+        self.revision = revision
+
+class BloomFilter(object):
+    def __init__(self, data_store, revision):
+        self.data_store = data_store
+        self.revision = revision
 
 if __name__ == '__main__':
     ds = DataStore(os.path.join('tmp', 'store0'), ['id0', 'id1'], ['first_name', 'last_name'])
