@@ -6,7 +6,7 @@ DATASTORE_FLAG_DELETE = 2
 
 class DataStore(object):
     def __init__(self, pk):
-        self.pk = pk # primary key
+        self.pk = tuple(pk) # primary key
         
         # memtable
         self.MEM_TABLE_MAX_ITEMS = 4
@@ -73,8 +73,11 @@ class MemTable(object):
         self.keys = []
         self.values = []
 
+        self.indexes = {ppk: MemIndex(self.datastore, ppk) for ppk in self.datastore.pk}
+        self.indexes[self.datastore.pk] = MemIndex(self.datastore, self.datastore.pk)
+
     def get_n_items(self):
-        return len(self.keys)
+        return len(self.values)
 
     def get(self, key):
         i = bisect_left(self.keys, key)
@@ -131,6 +134,59 @@ class MemTable(object):
 
     def filter(self, *terms):
         raise StopIteration
+
+class MemIndex(object):
+    def __init__(self, datastore, ppk):
+        self.datastore = datastore
+        self.ppk = ppk
+        self.flags = []
+        self.keys = []
+
+    def get(self, key):
+        i = bisect_left(self.keys, key)
+
+        if i == len(self.keys):
+            raise KeyError('Key not found: {}'.format(key))
+
+        # flag
+        flag = self.flags[i]
+
+        if flag == DATASTORE_FLAG_DELETE:
+            raise KeyError('Key not found: {}'.format(key))
+
+        return i
+
+    def set(self, key, doc):
+        i = bisect_left(self.keys, key)
+
+        if i == len(self.keys):
+            self.flags.insert(i, DATASTORE_FLAG_SET)
+            self.keys.insert(i, key)
+        else:
+            # check key
+            old_key = self.keys[i]
+
+            if old_key == key:
+                self.flags[i] = DATASTORE_FLAG_SET
+            else:
+                self.flags.insert(i, DATASTORE_FLAG_SET)
+                self.keys.insert(i, key)
+
+        return i
+
+    def delete(self, key):
+        i = bisect_left(self.keys, key)
+
+        if len(self.keys) > 0 and self.keys[i] == key:
+            self.flags[i] = DATASTORE_FLAG_DELETE
+        else:
+            # default empty doc
+            doc = {}
+
+            self.flags.insert(i, DATASTORE_FLAG_DELETE)
+            self.keys.insert(i, key)
+
+        return i
 
 class SSTable(object):
     def __init__(self, datastore):
