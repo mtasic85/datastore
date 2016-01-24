@@ -15,6 +15,16 @@ class DataStore(object):
         # memtables
         self.memtables = []
 
+    def push_memtable_if_necessary(self):
+        if self.memtable.get_n_items() >= self.MEM_TABLE_MAX_ITEMS:
+            # append current memtable to memtables
+            # and make it immutable
+            memtable = self.memtable
+            self.memtables.insert(0, memtable)
+
+            # create new memtable which is mutable
+            self.memtable = MemTable(datastore=self)
+
     def get(self, key):
         try:
             doc = self.memtable.get(key)
@@ -31,18 +41,11 @@ class DataStore(object):
         return doc
 
     def set(self, key, doc):
-        if self.memtable.get_n_items() >= self.MEM_TABLE_MAX_ITEMS:
-            # append current memtable to memtables
-            # and make it immutable
-            memtable = self.memtable
-            self.memtables.insert(0, memtable)
-
-            # create new memtable which is mutable
-            self.memtable = MemTable(datastore=self)
-
+        self.push_memtable_if_necessary()
         self.memtable.set(key, doc)
 
     def delete(self, key):
+        self.push_memtable_if_necessary()
         self.memtable.delete(key)
 
     def add(self, doc):
@@ -51,7 +54,17 @@ class DataStore(object):
 
     def remove(self, doc):
         key = tuple(doc[k] for k in self.pk)
-        self.delete(key, doc)
+        self.delete(key)
+
+    def filter(self, *terms):
+        for doc in self.memtable.filter(*terms):
+            yield doc
+
+        for memtable in self.memtables:
+            for doc in memtable.filter(*terms):
+                yield doc
+
+        raise StopIteration
 
 class MemTable(object):
     def __init__(self, datastore):
@@ -105,20 +118,23 @@ class MemTable(object):
 
     def delete(self, key):
         i = bisect_left(self.keys, key)
-        
-        if self.keys[i] == key:
+
+        if len(self.keys) > 0 and self.keys[i] == key:
             self.flags[i] = DATASTORE_FLAG_DELETE
         else:
+            # default empty doc
+            doc = {}
+
             self.flags.insert(i, DATASTORE_FLAG_DELETE)
             self.keys.insert(i, key)
             self.values.insert(i, doc)
 
+    def filter(self, *terms):
+        raise StopIteration
+
 class SSTable(object):
     def __init__(self, datastore):
         self.datastore = datastore
-
-    def __len__(self):
-        pass
 
     def get(self, key):
         pass
@@ -132,9 +148,9 @@ class SSTable(object):
 if __name__ == '__main__':
     ds = DataStore(pk=['a', 'b', 'c'])
     
-    for i in range(0, 2):
+    for i in range(0, 3):
         for j in range(0, 3):
-            for k in range(0, 4):
+            for k in range(0, 3):
                 doc = {'a': i, 'b': float(j), 'c': str(k), 'd': '{}-{}-{}'.format(i, j, k)}
                 ds.add(doc)
 
@@ -148,6 +164,12 @@ if __name__ == '__main__':
 
     key = (1, 1.0, '1')
     print(ds.get(key))
+
+    key = (2, 1.0, '2')
+    ds.delete(key)
+
+    key = (2, 2.0, '2')
+    ds.delete(key)
 
     key = (1, 1.0, '1')
     ds.delete(key)
@@ -164,8 +186,24 @@ if __name__ == '__main__':
     key = (1, 1.0, '1')
     print(ds.get(key))
 
+    """
+    """
+    # debug
     print('-' * 24)
-    print(list(zip(ds.memtable.flags, ds.memtable.keys, ds.memtable.values)))
+    
+    for n in zip(ds.memtable.flags, ds.memtable.keys, ds.memtable.values):
+        print(n)
     
     for memtable in ds.memtables:
-        print(list(zip(memtable.flags, memtable.keys, memtable.values)))
+        print('-' * 24)
+
+        for n in zip(memtable.flags, memtable.keys, memtable.values):
+            print(n)
+    """
+    """
+
+    docs = ds.filter(('a', '>=', 1), ('a', '<=', 2))
+    print(docs)
+
+    for doc in docs:
+        print(doc)
