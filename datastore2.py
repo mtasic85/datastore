@@ -69,27 +69,29 @@ class DataStore(object):
 class MemTable(object):
     def __init__(self, datastore):
         self.datastore = datastore
-        self.flags = []
-        self.keys = []
-        self.values = []
+        # self.flags = []
+        # self.keys = []
 
         self.indexes = {ppk: MemIndex(self.datastore, ppk) for ppk in self.datastore.pk}
         self.indexes[self.datastore.pk] = MemIndex(self.datastore, self.datastore.pk)
+        
+        self.values = []
 
     def get_n_items(self):
         return len(self.values)
 
     def get(self, key):
-        i = bisect_left(self.keys, key)
+        # i = bisect_left(self.keys, key)
 
-        if i == len(self.keys):
-            raise KeyError('Key not found: {}'.format(key))
+        # if i == len(self.keys):
+        #     raise KeyError('Key not found: {}'.format(key))
 
-        # flag
-        flag = self.flags[i]
+        # # flag
+        # flag = self.flags[i]
 
-        if flag == DATASTORE_FLAG_DELETE:
-            raise KeyError('Key not found: {}'.format(key))
+        # if flag == DATASTORE_FLAG_DELETE:
+        #     raise KeyError('Key not found: {}'.format(key))
+        i = self.indexes[self.datastore.pk].get(key)
 
         # check key of document
         doc = self.values[i]
@@ -101,23 +103,26 @@ class MemTable(object):
         return doc
 
     def set(self, key, doc):
-        i = bisect_left(self.keys, key)
+        # i = bisect_left(self.keys, key)
 
-        if i == len(self.keys):
-            self.flags.insert(i, DATASTORE_FLAG_SET)
-            self.keys.insert(i, key)
-            self.values.insert(i, doc)
-        else:
-            # check key
-            old_key = self.keys[i]
+        # if i == len(self.keys):
+        #     self.flags.insert(i, DATASTORE_FLAG_SET)
+        #     self.keys.insert(i, key)
+        #     self.values.insert(i, doc)
+        # else:
+        #     # check key
+        #     old_key = self.keys[i]
 
-            if old_key == key:
-                self.flags[i] = DATASTORE_FLAG_SET
-                self.values[i] = doc
-            else:
-                self.flags.insert(i, DATASTORE_FLAG_SET)
-                self.keys.insert(i, key)
-                self.values.insert(i, doc)
+        #     if old_key == key:
+        #         self.flags[i] = DATASTORE_FLAG_SET
+        #         self.values[i] = doc
+        #     else:
+        #         self.flags.insert(i, DATASTORE_FLAG_SET)
+        #         self.keys.insert(i, key)
+        #         self.values.insert(i, doc)
+        
+        i = self.indexes[self.datastore.pk].bisect_left(key, -1)
+
 
     def delete(self, key):
         i = bisect_left(self.keys, key)
