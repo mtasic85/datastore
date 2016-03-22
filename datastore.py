@@ -75,7 +75,7 @@ class DataStore(object):
                 print(path, sstable)
 
     def _memtable_full(self, memtable):
-        print('on_memtable_full', self, memtable)
+        print('_memtable_full', self, memtable)
         # sstable
         sstable = SSTable.from_memtable(memtable)
         self.sstable.append(sstable)
@@ -96,11 +96,16 @@ class DataStore(object):
 
 
 if __name__ == '__main__':
-    d = DataStore('tmp/demo0')
+    d = DataStore('tmp/demo0', 10)
 
-    for i in range(2000):
+    for i in range(d.max_memtable_cap * 2):
         d.set(i, i)
 
-    for i in range(2000):
-        v = d.get(i)
+    for i in range(d.max_memtable_cap * 2):
+        try:
+            v = d.get(i)
+        except KeyError as e:
+            print(KeyError, e)
+            continue
+
         print('{}: {}'.format(i, v))
