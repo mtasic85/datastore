@@ -3,19 +3,23 @@ import warnings
 
 
 class MemTable(object):
-    def __init__(self, cap=1000):
+    def __init__(self, db, cap=1000):
+        self.db = db
         self.cap = cap
         self.items = {}
         self.event_full_func = None
 
+    def __repr__(self):
+        return '<{} db:{} cap:{}>'.format(self.__class__.__name__, self.db, self.cap)
+
     def set(self, key, value):
-        if len(self.items) >= self.cap:
+        self.items[key] = value
+
+        if len(self.items) == self.cap:
             if self.event_full_func:
                 self.event_full_func(self)
             else:
                 warnings.warn('max capacity reached for memtable: {}'.format(self))
-
-        self.items[key] = value
 
     def get(self, key):
         value = self.items[key]
@@ -29,16 +33,17 @@ class MemTable(object):
 
 
 class SSTable(object):
-    def __init__(self, path):
+    def __init__(self, db, path):
+        self.db = db
         self.path = path
 
     def __repr__(self):
-        return '<{} path:{}>'.format(self, self.path)
+        return '<{} db:{} path:{}>'.format(self.__class__.__name__, self.db, self.path)
 
     @classmethod
-    def from_memtable(cls, memtable):
+    def from_memtable(cls, db, memtable):
         path = None
-        sstable = SSTable(path)
+        sstable = SSTable(db, path)
         return sstable
 
     def set(self, key, value):
@@ -61,7 +66,7 @@ class DataStore(object):
 
         # memtable
         self.max_memtable_cap = max_memtable_cap
-        self.memtable = MemTable(max_memtable_cap)
+        self.memtable = MemTable(self.db, max_memtable_cap)
         self.memtable.on_full(self._memtable_full)
 
         # sstable
@@ -70,18 +75,22 @@ class DataStore(object):
         for entry in os.scandir(dirpath):
             if entry.is_file() and entry.name.endswith('.sstable'):
                 path = os.path.join(self.dirpath, entry.name)
-                sstable = SSTable(path)
+                sstable = SSTable(self.db, path)
                 self.sstables.append(sstable)
                 print(path, sstable)
 
+    def __repr__(self):
+        return '<{} db:{}>'.format(self.__class__.__name__, self.db)
+
     def _memtable_full(self, memtable):
         print('_memtable_full', self, memtable)
+
         # sstable
-        sstable = SSTable.from_memtable(memtable)
+        sstable = SSTable.from_memtable(self.db, memtable)
         self.sstable.append(sstable)
         
         # memtable
-        self.memtable = MemTable(self.max_memtable_cap)
+        self.memtable = MemTable(self.db, self.max_memtable_cap)
         self.memtable.on_full(self._memtable_full)
 
     def set(self, key, value):
@@ -98,10 +107,10 @@ class DataStore(object):
 if __name__ == '__main__':
     d = DataStore('tmp/demo0', 10)
 
-    for i in range(d.max_memtable_cap * 2):
+    for i in range(d.max_memtable_cap * 2 - 1):
         d.set(i, i)
 
-    for i in range(d.max_memtable_cap * 2):
+    for i in range(d.max_memtable_cap * 2 - 1):
         try:
             v = d.get(i)
         except KeyError as e:
