@@ -104,8 +104,37 @@ class DataStore(object):
         self.memtable.delete(key)
 
 
+class Model(object):
+    def 
+
+
 if __name__ == '__main__':
     d = DataStore('tmp/demo0', 10)
+
+    UserModel = d.model(
+        'user',
+        username=TextField(),
+        password=TextField(),
+        first_name=TextField(),
+        last_name=TextField(),
+        email=TextField(),
+        dob=DateField(),
+        username_index=Index('username'),
+        dob_index=Index('dob'),
+        dob_email_index=Index('dob', 'email'),
+    )
+
+    results = UserModel.query(
+        Or(
+            Term('username', 'mtasic'),
+            And(
+                Le(Term('dob', '19850623')),
+                Ge(Term('dob', '19890625')),
+            )
+        )
+    )
+
+    results = UserModel.query('username == "mtasic" OR (dob < "19850623" AND dob > "19890625")')
 
     for i in range(d.max_memtable_cap * 2 - 1):
         d.set(i, i)
