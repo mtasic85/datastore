@@ -6,6 +6,51 @@ import warnings
 __all__ = ['DataStore']
 
 
+class Field(object):
+    def __init__(self, name, primary_key=False):
+        self.name = name
+
+
+class BoolField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class IntField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class FloatField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class TextField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class DateField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class TimeField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class DateTimeField(Field):
+    def __init__(self, name, primary_key=False):
+        Field.__init__(self, name=name, primary_key=primary_key)
+
+
+class Index(object):
+    def __init__(self, columns):
+        self.columns = columns
+
+
 class TableMeta(object):
     def __init__(self, table, fields=None):
         self.table = table
@@ -209,7 +254,7 @@ if __name__ == '__main__':
     User = d.table('User', mem_table_cap=10).fields(
         username=TextField(primary_key=True),
         password=TextField(primary_key=True),
-        created=DatetimeField(primary_key=True),
+        created=DateTimeField(primary_key=True),
         first_name=TextField(),
         last_name=TextField(),
         email=TextField(),
