@@ -1,146 +1,212 @@
 import os
+import sys
+import json
 import warnings
+
+__all__ = ['DataStore']
 
 
 class TableMeta(object):
-    def __init__(self, ds):
-        self.ds = ds
+    def __init__(self, table, fields=None):
+        self.table = table
+        self.fields = fields
+
+        self.path = os.path.join(
+            self.table.ds.dirpath,
+            '{}.meta'.format(self.table.name),
+        )
+
+        if self.fields:
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    meta = json.load(f)
+                    fields = meta.get('fields', None)
+                    # compare fields
+            else:
+                with open(path, 'w') as f:
+                    meta = {
+                        'name': self.table.name,
+                        'fields': self.fields,
+                    }
+
+                    json.dump(meta, f)
+        else:
+            # look for .meta file (JSON)
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    meta = json.load(f)
+                    self.fields = meta.get('fields', None)
+
+class MemIndex(object):
+    def __init__(self, mem_table, columns):
+        self.mem_table = mem_table
+        self.columns = columns
+        self.items = []
+
+    def add(self, row):
+        # columns: pos_in_mem_table
+        pass
+
+    def execute(self, q):
+        pass
 
 
-class MemTableData(object):
-    def __init__(self, table, cap=1000):
+class MemTable(object):
+    def __init__(self, table, cap=1000, on_full=None):
         self.table = table
         self.cap = cap
         self.items = []
-        self.event_full_func = None
+        self.on_full_callback = on_full
 
     def __repr__(self):
-        return '<{} table:{} cap:{}>'.format(self.__class__.__name__, self.table, self.cap)
+        return '<{} table:{} len:{} cap:{}>'.format(
+            self.__class__.__name__,
+            self.table,
+            len(self.cap),
+            self.cap,
+        )
 
     def set(self, key, value):
+        # FIXME:
         self.items[key] = value
 
         if len(self.items) == self.cap:
-            if self.event_full_func:
-                self.event_full_func(self)
+            if self.on_full_callback:
+                self.on_full_callback(table=self.table, mem_table=self)
             else:
                 warnings.warn('max capacity reached for memtable: {}'.format(self))
 
     def get(self, key):
+        # FIXME:
         value = self.items[key]
         return value
 
     def delete(self, key):
+        # FIXME:
         del self.items[key]
 
     def on_full(self, func):
-        self.event_full_func = func
+        self.on_full_callback = func
 
 
-class TableData(object):
-    def __init__(self, db, path):
-        self.db = db
+class FileIndex(object):
+    def __init__(self, file_table, columns, path):
+        self.file_table = file_table
         self.path = path
 
+        # FIXME: mmap file
+
     def __repr__(self):
-        return '<{} db:{} path:{}>'.format(self.__class__.__name__, self.db, self.path)
+        return '<{} table:{} path:{}>'.format(
+            self.__class__.__name__,
+            self.table,
+            self.path,
+        )
+
+    def execute(self, q):
+        pass
+
+
+class FileTable(object):
+    def __init__(self, table, path):
+        self.table = table
+        self.path = path
+
+        # FIXME: mmap file
+
+    def __repr__(self):
+        return '<{} table:{} path:{}>'.format(
+            self.__class__.__name__,
+            self.table,
+            self.path,
+        )
 
     @classmethod
-    def from_memtable(cls, db, memtable):
-        path = None
-        sstable = SSTable(db, path)
-        return sstable
-
-    def set(self, key, value):
-        pass
+    def from_memtable(cls, table, mem_table):
+        file_table = FileTable(table, mem_table)
+        return file_table
 
     def get(self, key):
-        pass
-
-    def delete(self, key):
         pass
 
 
 class Table(object):
-    def __init__(self, ds, name):
+    def __init__(self, ds, name, fields=None, mem_table_cap=1000):
         self.ds = ds
         self.name = name
 
-        self.table_meta = TableMeta(self) # look for .meta file
-        self.mem_table_data = MemTableData(self)
-        self.table_data_items = [] # scan for .data files
-        self.table_index_items = [] # scan for .index files
+        self.meta = TableMeta(table=self, fields=fields)
+        self.mem_table = MemTable(table=self, mem_table_cap=mem_table_cap, on_full=self._mem_full)
+        self.mem_index = MemIndex(table=self)
+        self.file_tables = [] # scan for .data files
+        self.file_indexes = [] # scan for .index files
+
+        # scan datastore dir for data files
+        for entry in os.scandir(self.ds.dirpath):
+            if entry.is_file() and entry.name.endswith('.data'):
+                path = os.path.join(self.dirpath, entry.name)
+                file_table = FileTable(table=self, path=path)
+                self.file_tables.append(file_table)
+                print(path, file_table)
+
+    def fields(self, fields):
+        self.meta = TableMeta(table=self, fields=fields)
+        return self
 
     def set(self, key, value):
-        self.mem_table_data.set(key, value)
+        self.mem_table.set(key, value)
 
     def get(self, key):
-        value = self.mem_table_data.get(key)
+        value = self.mem_table.get(key)
         return value
 
     def delete(self, key):
-        self.mem_table_data.delete(key)
+        self.mem_table.delete(key)
+
+    def _mem_full(self, table, mem_table):
+        print('_mem_full', self, memtable)
+
+        # table
+        table_data = TableData.from_mem_table(self.db, memtable)
+        self.sstable.append(sstable)
+
+        # memtable
+        self.memtable = MemTable(self.db, self.max_memtable_cap)
+        self.memtable.on_full(self._memtable_full)
+
+    def execute(self, q):
+        pass
 
 
 class DataStore(object):
-    def __init__(self, dirpath, max_memtable_cap=1000):
-        self.db = os.path.split(dirpath)[-1]
-        self.dirpath = dirpath
+    def __init__(self, dirpath):
+        self.dirpath = os.path.abspath(dirpath)
 
-        if not os.path.exists(dirpath):
+        if not os.path.exists(self.dirpath):
+            msg = 'datastore does not exist at {}'.format(repr(self.dirpath))
+            msg += ', so it will be created.'
+            warnings.warn(msg)
             os.makedirs(dirpath)
 
         # database tables
         self.tables = {}
 
-        # # memtable
-        # self.max_memtable_cap = max_memtable_cap
-        # self.memtable = MemTable(self.db, max_memtable_cap)
-        # self.memtable.on_full(self._memtable_full)
-
-        # # sstable
-        # self.sstable = []
-
-        # for entry in os.scandir(dirpath):
-        #     if entry.is_file() and entry.name.endswith('.sstable'):
-        #         path = os.path.join(self.dirpath, entry.name)
-        #         sstable = SSTable(self.db, path)
-        #         self.sstables.append(sstable)
-        #         print(path, sstable)
-
     def __repr__(self):
-        return '<{} db:{}>'.format(self.__class__.__name__, self.db)
+        return '<{} dirpath:{}>'.format(
+            self.__class__.__name__,
+            repr(self.dirpath),
+        )
 
-    def table(self, name, **fields):
-        t = Table(self, name, **fields)
+    def table(self, name, fields=None, mem_table_cap=1000):
+        t = Table(self, name, fields, mem_table_cap=mem_table_cap)
         self.tables[name] = t
         return t
 
-    # def _memtable_full(self, memtable):
-    #     print('_memtable_full', self, memtable)
-
-    #     # sstable
-    #     sstable = SSTable.from_memtable(self.db, memtable)
-    #     self.sstable.append(sstable)
-        
-    #     # memtable
-    #     self.memtable = MemTable(self.db, self.max_memtable_cap)
-    #     self.memtable.on_full(self._memtable_full)
-
-
-class Table(object):
-    def __init__(self, name, **fields):
-        self.name = name
-        self.fields = fields
-
-    def execute(self, q):
-        pass
 
 if __name__ == '__main__':
-    d = DataStore('tmp/demo0', 10)
+    d = DataStore('tmp/demo0')
 
-    User = d.table(
-        'user',
+    User = d.table('User', mem_table_cap=10).fields(
         username=TextField(primary_key=True),
         password=TextField(primary_key=True),
         created=DatetimeField(primary_key=True),
@@ -152,22 +218,22 @@ if __name__ == '__main__':
         dob_email_index=Index('dob', 'email'),
     )
 
-    results = User.execute(
-        Or(
-            Term('username', 'mtasic'),
-            And(
-                Le(Term('dob', '19850623')),
-                Ge(Term('dob', '19890625')),
-            )
-        )
-    )
+    # results = User.execute(
+    #     Or(
+    #         Term('username', 'mtasic'),
+    #         And(
+    #             Le(Term('dob', '19850623')),
+    #             Ge(Term('dob', '19890625')),
+    #         )
+    #     )
+    # )
 
-    results = User.execute('username == "mtasic" OR (dob < "19850623" AND dob > "19890625")')
+    # results = User.execute('username == "mtasic" OR (dob < "19850623" AND dob > "19890625")')
 
-    for i in range(d.max_memtable_cap * 2 - 1):
+    for i in range(User.mem_table.mem_table_cap * 2 - 1):
         d.set(i, i)
 
-    for i in range(d.max_memtable_cap * 2 - 1):
+    for i in range(User.mem_table.mem_table_cap * 2 - 1):
         try:
             v = d.get(i)
         except KeyError as e:
