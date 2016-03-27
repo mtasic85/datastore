@@ -11,12 +11,13 @@ __all__ = ['DataStore']
 #
 class Field(object):
     def __init__(self, name=None, primary_key=False):
+        self.type = None
         self.name = name
         self.primary_key = primary_key
 
     def __getstate__(self):
         return {
-            'type': self.__class__.__name__,
+            'type': self.type,
             'name': self.name,
             'primary_key': self.primary_key,
         }
@@ -25,46 +26,54 @@ class Field(object):
 class BoolField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'bool'
 
 
 class IntField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'int'
 
 
 class FloatField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'float'
 
 
 class TextField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'text'
 
 
 class DateField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'date'
 
 
 class TimeField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'time'
 
 
 class DateTimeField(Field):
     def __init__(self, primary_key=False):
         Field.__init__(self, primary_key=primary_key)
+        self.type = 'datetime'
 
 
 class Index(object):
     def __init__(self, *columns):
+        self.type = 'index'
         self.name = None
         self.columns = columns
 
     def __getstate__(self):
         return {
-            'type': self.__class__.__name__,
+            'type': self.type,
             'name': self.name,
             'columns': self.columns,
         }
@@ -164,7 +173,8 @@ class TableMeta(object):
                 with open(self.path, 'r') as f:
                     meta = json.load(f)
                     fields = meta.get('fields', None)
-                    # compare fields
+                    
+                    # FIXME: compare fields
             else:
                 with open(self.path, 'w') as f:
                     meta = {
@@ -175,7 +185,7 @@ class TableMeta(object):
                         },
                     }
 
-                    json.dump(meta, f)
+                    json.dump(meta, f, indent=4)
         else:
             # look for .meta file (JSON)
             if os.path.exists(self.path):
@@ -395,12 +405,12 @@ if __name__ == '__main__':
     #     'username == "mtasic" OR (dob < "19850623" AND dob > "19890625")'
     # )
 
-    for i in range(User.mem_table.mem_table_cap * 2 - 1):
-        d.set(i, i)
+    for i in range(User.mem_table.cap * 2 - 1):
+        User.set(i, i)
 
-    for i in range(User.mem_table.mem_table_cap * 2 - 1):
+    for i in range(User.mem_table.cap * 2 - 1):
         try:
-            v = d.get(i)
+            v = User.get(i)
         except KeyError as e:
             print(KeyError, e)
             continue
