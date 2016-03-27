@@ -5,52 +5,69 @@ import warnings
 
 __all__ = ['DataStore']
 
+
 #
 # fields
 #
 class Field(object):
-    def __init__(self, name, primary_key=False):
+    def __init__(self, name=None, primary_key=False):
         self.name = name
+        self.primary_key = primary_key
+
+    def __getstate__(self):
+        return {
+            'type': self.__class__.__name__,
+            'name': self.name,
+            'primary_key': self.primary_key,
+        }
 
 
 class BoolField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class IntField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class FloatField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class TextField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class DateField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class TimeField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class DateTimeField(Field):
-    def __init__(self, name, primary_key=False):
-        Field.__init__(self, name=name, primary_key=primary_key)
+    def __init__(self, primary_key=False):
+        Field.__init__(self, primary_key=primary_key)
 
 
 class Index(object):
-    def __init__(self, columns):
+    def __init__(self, *columns):
+        self.name = None
         self.columns = columns
+
+    def __getstate__(self):
+        return {
+            'type': self.__class__.__name__,
+            'name': self.name,
+            'columns': self.columns,
+        }
 
 
 #
@@ -136,30 +153,33 @@ class TableMeta(object):
     def __init__(self, table, fields=None):
         self.table = table
         self.fields = fields
-
+        
         self.path = os.path.join(
             self.table.ds.dirpath,
             '{}.meta'.format(self.table.name),
         )
 
         if self.fields:
-            if os.path.exists(path):
-                with open(path, 'r') as f:
+            if os.path.exists(self.path):
+                with open(self.path, 'r') as f:
                     meta = json.load(f)
                     fields = meta.get('fields', None)
                     # compare fields
             else:
-                with open(path, 'w') as f:
+                with open(self.path, 'w') as f:
                     meta = {
                         'name': self.table.name,
-                        'fields': self.fields,
+                        'fields': {
+                            k: v.__getstate__()
+                            for k, v in self.fields.items()
+                        },
                     }
 
                     json.dump(meta, f)
         else:
             # look for .meta file (JSON)
-            if os.path.exists(path):
-                with open(path, 'r') as f:
+            if os.path.exists(self.path):
+                with open(self.path, 'r') as f:
                     meta = json.load(f)
                     self.fields = meta.get('fields', None)
 
@@ -248,8 +268,12 @@ class FileTable(object):
         )
 
     @classmethod
-    def from_memtable(cls, table, mem_table):
-        file_table = FileTable(table, mem_table)
+    def from_mem_table(cls, table, mem_table):
+        # save to file
+        # FIXME: implement
+
+        # instantiate FileTable
+        file_table = FileTable(table, path)
         return file_table
 
     def get(self, key):
@@ -262,10 +286,8 @@ class Table(object):
         self.name = name
 
         self.meta = TableMeta(table=self, fields=fields)
-        self.mem_table = MemTable(table=self, mem_table_cap=mem_table_cap, on_full=self._mem_full)
-        self.mem_index = MemIndex(table=self)
+        self.mem_table = MemTable(table=self, cap=mem_table_cap, on_full=self._mem_full)
         self.file_tables = [] # scan for .data files
-        self.file_indexes = [] # scan for .index files
 
         # scan datastore dir for data files
         for entry in os.scandir(self.ds.dirpath):
@@ -275,7 +297,7 @@ class Table(object):
                 self.file_tables.append(file_table)
                 print(path, file_table)
 
-    def fields(self, fields):
+    def fields(self, **fields):
         self.meta = TableMeta(table=self, fields=fields)
         return self
 
@@ -290,15 +312,18 @@ class Table(object):
         self.mem_table.delete(key)
 
     def _mem_full(self, table, mem_table):
-        print('_mem_full', self, memtable)
+        print('_mem_full', self, table, mem_table)
 
         # table
-        table_data = TableData.from_mem_table(self.db, memtable)
-        self.sstable.append(sstable)
+        file_table = FileTable.from_mem_table(table=table, mem_table=mem_table)
+        self.file_tables.append(file_table)
 
         # memtable
-        self.memtable = MemTable(self.db, self.max_memtable_cap)
-        self.memtable.on_full(self._memtable_full)
+        self.mem_table = MemTable(
+            table=table,
+            cap=mem_table.cap,
+            on_full=self._mem_full,
+        )
 
     def execute(self, q):
         pass
@@ -344,15 +369,15 @@ if __name__ == '__main__':
         dob_email_index=Index('dob', 'email'),
     )
 
-    results = User.execute(
-        Or(
-            Term('username', 'mtasic'),
-            And(
-                Le(Term('dob', '19850623')),
-                Ge(Term('dob', '19890625')),
-            )
-        )
-    )
+    # results = User.execute(
+    #     Or(
+    #         Term('username', 'mtasic'),
+    #         And(
+    #             Le(Term('dob', '19850623')),
+    #             Ge(Term('dob', '19890625')),
+    #         )
+    #     )
+    # )
 
     # results = User.execute(
     #     Term('username', 'mtasic') | (
