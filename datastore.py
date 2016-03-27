@@ -5,7 +5,9 @@ import warnings
 
 __all__ = ['DataStore']
 
-
+#
+# fields
+#
 class Field(object):
     def __init__(self, name, primary_key=False):
         self.name = name
@@ -51,6 +53,85 @@ class Index(object):
         self.columns = columns
 
 
+#
+# query
+#
+class Term(object):
+    # FIXME: implement methods for infix operations &, |, -, ^
+
+    def __init__(self, field_name, value):
+        self.field_name = field_name
+        self.value = value.lower()
+
+    def execute(self, table):
+        results = None # {}
+        return rows
+
+
+class BinOp(object):
+    def __init__(self, operator, operands):
+        self.operator = operator
+        self.operands = operands
+
+    def execute(self, model):
+        raise NotImplementedError
+
+
+class And(BinOp):
+    def __init__(self, *operands):
+        BinOp.__init__(self, 'AND', operands)
+
+    def execute(self, model):
+        results = None # {}
+        return rows
+
+
+class Or(BinOp):
+    def __init__(self, *operands):
+        BinOp.__init__(self, 'OR', operands)
+
+    def execute(self, model):
+        results = None # {}
+        return rows
+
+
+class Sub(BinOp):
+    def __init__(self, *operands):
+        BinOp.__init__(self, 'SUB', operands)
+
+    def execute(self, model):
+        results = None # {}
+        return rows
+
+
+class Xor(BinOp):
+    def __init__(self, *operands):
+        BinOp.__init__(self, 'XOR', operands)
+
+    def execute(self, model):
+        results = None # {}
+        return rows
+
+
+class Union(Or):
+    pass
+
+
+class Intersection(And):
+    pass
+
+
+class Difference(Sub):
+    pass
+
+
+class SymmetricDifference(Xor):
+    pass
+
+
+#
+# table
+#
 class TableMeta(object):
     def __init__(self, table, fields=None):
         self.table = table
@@ -263,17 +344,31 @@ if __name__ == '__main__':
         dob_email_index=Index('dob', 'email'),
     )
 
+    results = User.execute(
+        Or(
+            Term('username', 'mtasic'),
+            And(
+                Le(Term('dob', '19850623')),
+                Ge(Term('dob', '19890625')),
+            )
+        )
+    )
+
     # results = User.execute(
-    #     Or(
-    #         Term('username', 'mtasic'),
-    #         And(
-    #             Le(Term('dob', '19850623')),
-    #             Ge(Term('dob', '19890625')),
-    #         )
+    #     Term('username', 'mtasic') | (
+    #         '19890625' <= Term('dob') <= '19850623'
     #     )
     # )
 
-    # results = User.execute('username == "mtasic" OR (dob < "19850623" AND dob > "19890625")')
+    # results = User.execute(
+    #     User.username == 'mtasic' | (
+    #         '19890625' <= User.dob <= '19850623'
+    #     )
+    # )
+
+    # results = User.execute(
+    #     'username == "mtasic" OR (dob < "19850623" AND dob > "19890625")'
+    # )
 
     for i in range(User.mem_table.mem_table_cap * 2 - 1):
         d.set(i, i)
